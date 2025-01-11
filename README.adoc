@@ -2,6 +2,8 @@
 :project-owner:   redis-field-engineering
 :project-name:    riotx
 :project-title:   RIOT-X
+:dist-repo:       riotx-dist
+:project-url:     https://github.com/{project-owner}/{dist-repo}
 :doc-url:         https://{project-owner}.github.io/riotx
 
 image::{doc-url}/images/riotx.svg[RIOT-X]
@@ -21,6 +23,15 @@ image::{doc-url}/images/riotx-dashboard-jvm.png[]
 == Documentation
 
 link:{doc-url}[]
+
+== Demo
+
+[source,console,subs="verbatim,attributes"]
+----
+git clone {project-url}.git
+cd {dist-repo}
+docker compose -f docker-compose-replicate.yml up
+----
 
 == Support
 
