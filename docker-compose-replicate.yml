@@ -1,0 +1,49 @@
+services:
+  prometheus:
+    image: prom/prometheus
+    ports:
+      - 9090:9090
+    volumes:
+      - ./prometheus/prometheus.yml:/etc/prometheus/prometheus.yml
+
+  grafana:
+    image: grafana/grafana
+    ports:
+      - 3000:3000
+    volumes:
+      - ./grafana/provisioning:/etc/grafana/provisioning
+
+  redis-source:
+    image: redis/redis-stack-server:latest
+    hostname: redis-source
+    ports:
+      - 6379:6379
+
+  redis-cli:
+    image: redis/redis-stack-server:latest
+    depends_on:
+      - redis-source
+    command: "redis-cli -h redis-source config set notify-keyspace-events KEA"
+
+  redis-target:
+    image: redis/redis-stack-server:latest
+    hostname: redis-target
+    ports:
+      - 6380:6379
+  
+  riot-gen:
+    image: riotx/riotx:latest
+    depends_on:
+      - redis-source
+    command: generate -h redis-source --sleep 1 --count 1000000
+
+  riot-replicate:
+    image: riotx/riotx:latest
+    depends_on:
+      - redis-target
+    command: replicate redis-source:6379 redis-target:6379 --mode live --metrics
+    ports:
+      - 8080:8080
+
+
+    
