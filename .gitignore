@@ -1,3 +1,8 @@
 /.project
 /.settings/
 /.idea/
+
+# Environment files - contain sensitive credentials
+.env
+
+TASK-MEMORY.md
