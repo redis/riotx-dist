@@ -1,5 +1,5 @@
 :linkattrs:
-:project-owner:   redis-field-engineering
+:project-owner:   redis
 :project-name:    riotx
 :project-title:   RIOT-X
 :dist-repo:       riotx-dist

@@ -9,7 +9,7 @@ Redis Ltd., on behalf of itself and its affiliates and subsidiaries worldwide
 Licensed Work:
 
 
-The Licensed Work means the RIOT-X application and libraries described [here](https://github.com/redis-field-engineering/riotx-dist)
+The Licensed Work means the RIOT-X application and libraries described [here](https://github.com/redis/riotx-dist)
 
 Additional Use Grant:
 
