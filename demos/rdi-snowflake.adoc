@@ -13,9 +13,11 @@ This guide contains step-by-step instructions for Snowflake CDC with Redis Data 
 
 == GKE and Redis Enterprise
 
-Follow the steps at https://github.com/redis-field-engineering/re-k8s-on-gke-quickstart[re-k8s-on-gke-quickstart] to:
+Before starting, ensure you have:
 
-1. Create a GKE cluster.
+1. ☁️ **Google Cloud account** with billing enabled
+2. ❄️ **Snowflake account** - Register for a https://signup.snowflake.com[free trial] if needed
+3. 🔍 **https://redis.io/insight/[Redis Insight]** installed on your local machine
 
 2. Deploy Redis Enterprise.
 
