@@ -1,17 +1,19 @@
-= Snowflake CDC with RDI and RIOT-X
+= 🏔️ Snowflake CDC with RDI and RIOT-X
 :rdi-version: 1.12.3
 :rdi-pass: admin123
 :rdi-jwt: CwxMR2btWRxlIWaF89f4NuCfPXFtDb3pTUqI3YnZUB0=
 
-This guide contains step-by-step instructions for Snowflake CDC with Redis Data Integration (RDI) and RIOT-X.
+This comprehensive guide provides step-by-step instructions for setting up real-time Change Data Capture (CDC) from Snowflake to Redis using Redis Data Integration (RDI) and RIOT-X.
+It uses Google Kubernetes Engine (https://cloud.google.com/kubernetes-engine?hl=en[GKE]) to deploy all the components involved.
 
-== Prerequisites
+[TIP]
+====
+⏱️ **Estimated completion time:** 45-60 minutes
 
-1. Google Cloud account.
-2. Snowflake account. Register for a https://signup.snowflake.com[free trial].
-3. https://redis.io/insight/[Redis Insight]
+📋 **What you'll build:** A complete CDC pipeline that captures changes from Snowflake and streams them to Redis in real-time
+====
 
-== GKE and Redis Enterprise
+== 📋 Prerequisites
 
 Before starting, ensure you have:
 
@@ -19,16 +21,24 @@ Before starting, ensure you have:
 2. ❄️ **Snowflake account** - Register for a https://signup.snowflake.com[free trial] if needed
 3. 🔍 **https://redis.io/insight/[Redis Insight]** installed on your local machine
 
-2. Deploy Redis Enterprise.
+== ☸️ GKE and Redis Enterprise Setup
 
-3. Create the target Redis database.
+First, we'll set up our Kubernetes infrastructure and Redis databases.
+
+Follow the guide at https://github.com/redis-field-engineering/re-k8s-on-gke-quickstart[re-k8s-on-gke-quickstart] to:
+
+1. 🏗️ **Create a GKE cluster** with appropriate node pools
+2. 🚀 **Deploy Redis Enterprise** operator and cluster
+3. 🎯 **Create the target Redis database** for storing CDC data
 
 [[_target_db]]
-=== Target Redis Database
+=== 🎯 Target Redis Database
 
-[NOTE]
+[IMPORTANT]
 ====
-Modify `redis-database.yaml` to lower memory size and shard count, and disable TLS:
+⚙️ **Configuration adjustments needed:**
+
+For this demo, modify `redis-database.yaml` to use minimal resources and disable TLS for simplicity:
 
 [source,yaml]
 ----
@@ -37,9 +47,11 @@ Modify `redis-database.yaml` to lower memory size and shard count, and disable T
   # ...
   tlsMode: "disabled"
 ----
+
+💡 This configuration is suitable for development/testing. For production, consider enabling TLS and scaling resources appropriately.
 ====
 
-Verify the Redis database has been created and keep the connection information for later:
+✅ **Verify the Redis database creation** and save the connection details for later use:
 
 [source,console]
 ----
@@ -49,9 +61,11 @@ Verify the Redis database has been created and keep the connection information f
 ...
 ----
 
-=== RDI Redis Database
+=== 🗃️ RDI State Database
 
-1. Create another Redis Enterprise database that RDI will use to store its state:
+RDI requires its own dedicated Redis database to store pipeline state and metadata.
+
+1. **Create the RDI state database** using the following configuration:
 +
 .`redis-rdi.yaml`
 [source,yaml]
@@ -81,14 +95,14 @@ spec:
   tlsMode: "disabled"
 ----
 
-2. Create the RDI database
+2. **Deploy the RDI database** to your cluster:
 +
 [source,console]
 ----
 kubectl apply -f redis-rdi.yaml
 ----
 
-3. Verify the database has been created and keep the connection information for later:
+3. ✅ **Verify deployment** and save the connection details:
 +
 [source,console]
 ----
@@ -99,18 +113,18 @@ kubectl apply -f redis-rdi.yaml
 ----
 
 
-== RDI
+== 🔄 RDI Installation
 
-To deploy RDI on our GKE cluster we will follow *some* of the steps from the RDI documentation https://redis.io/docs/latest/integrate/redis-data-integration/installation/install-k8s/[Install on Kubernetes].
+Now we'll deploy Redis Data Integration (RDI) on our GKE cluster. We'll use a subset of the official RDI Kubernetes installation steps from the https://redis.io/docs/latest/integrate/redis-data-integration/installation/install-k8s/[official documentation].
 
-1. Download the RDI Helm chart tar file
+1. 📥 **Download the RDI Helm chart:**
 +
 [source,console,subs="verbatim,attributes"]
 ----
 wget https://redis-enterprise-software-downloads.s3.amazonaws.com/redis-di/rdi-{rdi-version}.tgz
 ----
 
-2. Create a values file:
+2. 📝 **Create a custom values file** for our GKE deployment:
 +
 .`rdi-values.yaml`
 [source,yaml,subs="verbatim,attributes"]
@@ -243,21 +257,21 @@ route:
     enabled: false
 ----
 
-3. Install the Helm chart:
+3. 🚀 **Install RDI using Helm:**
 +
 [source,console,subs="verbatim,attributes"]
 ----
 helm upgrade --install rdi rdi-{rdi-version}.tgz -f rdi-values.yaml -n rdi --create-namespace
 ----
 
-4. Verify the installation:
+4. ✅ **Verify the RDI installation:**
 +
 [source,console]
 ----
 helm list -n rdi
 ----
 +
-The output looks like the following:
+Expected output:
 +
 [source,console,subs="verbatim,attributes"]
 ----
@@ -266,7 +280,7 @@ default rdi             5               2025-08-14 ...  deployed        pipeline
 rdi     rdi             9               2025-08-13 ...  deployed        rdi-{rdi-version}
 ----
 +
-Also check that all pods have Running status:
+🔍 **Check pod status** - all pods should be in `Running` state:
 +
 [source,console,subs="verbatim,attributes"]
 ----
@@ -280,7 +294,7 @@ rdi-operator-745854864f-shn7r           1/1     Running     1 (12h ago)   21h
 rdi-reloader-546c9cd849-2zq98           1/1     Running     0             41h
 ----
 
-5. Get the RDI API ingress information and note the IP address for later:
+5. 🌐 **Get the RDI API external IP** (you'll need this for Redis Insight):
 +
 [source,console]
 ----
@@ -305,27 +319,29 @@ Events:       <none>
 ----
 <1> RDI API external IP address
 
-== Redis Insight
+== 🔍 Redis Insight Configuration
 
-=== RDI Job
+=== 🔧 RDI Pipeline Setup
 
-Let's configure a RDI pipeline job using Redis Insight.
+Now we'll configure our CDC pipeline using Redis Insight.
 
-1. Add endpoint
+1. 🔗 **Add RDI endpoint:**
 +
-Click on `Redis Data Integration` and create an endpoint with:
+In Redis Insight, navigate to `Redis Data Integration` and create a new endpoint with these settings:
 +
 [horizontal,subs="verbatim,attributes"]
 ----
 RDI Alias:: `gke`
 URL:: `https://<external_ip>/`
 Username:: `default`
-Password:: `admin123`
+Password:: `{rdi-pass}`
 ----
 +
-Click on `Configuration file` and paste this:
+📄 **Set up the pipeline configuration:**
 +
-[source,yaml]
+Click on `Configuration file` and paste this YAML configuration:
++
+[source,yaml,subs="verbatim,attributes"]
 ----
 sources:
   riotx:
@@ -334,16 +350,16 @@ sources:
 
 targets:
   target:
-  connection:
-    type: redis
-    host: redis-db-sample-load-balancer.redis-enterprise.svc.cluster.local
-    port: 12000
-    password: admin123
+    connection:
+      type: redis
+      host: redis-db-sample-load-balancer.redis-enterprise.svc.cluster.local
+      port: 12000
+      password: {rdi-pass}
 ----
 
-2. Add job
+2. ⚡ **Create the CDC job:**
 +
-Now click the `+` sign next to *Jobs*. Give it the name `orders` and paste the following:
+Click the `+` button next to *Jobs*, name it `orders`, and add this job configuration:
 +
 [source,yaml]
 ----
@@ -361,69 +377,128 @@ output:
         language: jmespath
 ----
 
-3. Deploy pipeline
+3. 🚀 **Deploy the pipeline:**
 +
-Click on **Deploy Pipeline**, check the **Reset** box, and then **Deploy**.
+[IMPORTANT]
+====
+Click **Deploy Pipeline**, make sure to check the **Reset** checkbox (this clears any existing state), then click **Deploy**.
 
-== Snowflake
+⏳ Wait for the deployment to complete before proceeding to the next step.
+====
 
-=== Database Setup
-In your https://quickstarts.snowflake.com/guide/getting_started_with_snowflake_notebooks/index.html?index=..%2F..index#1[Snowflake UI] (Snowsight) import this notebook: link:https://redis.github.io/riotx/snowflake-cdc.ipynb[snowflake-cdc.ipynb].
-Run the first 2 steps in the notebook:
+== ❄️ Snowflake Configuration
 
+=== 🗄️ Database and Schema Setup
+
+We'll use a Snowflake notebook to set up our environment with sample data.
+
+1. 📓 **Import the setup notebook:**
++
+In your https://quickstarts.snowflake.com/guide/getting_started_with_snowflake_notebooks/index.html?index=..%2F..index#1[Snowflake UI (Snowsight)], import this notebook: https://redis.github.io/riotx/snowflake-cdc.ipynb[snowflake-cdc.ipynb]
+
+2. 🏃 **Run the initial setup steps:**
++
+Execute only these first two notebook cells:
++
 [horizontal]
-`init`:: Set up roles, permissions and schema
-`populate`:: Create and populate table
+`init`:: 🏗️ Sets up roles, permissions, and schema structure
+`populate`:: 📊 Creates and populates the `incremental_order_header` table with sample data
 
-IMPORTANT: Do not run the other steps yet. These are for later.
+[CAUTION]
+====
+⛔ **Stop here!** Do not run the remaining notebook steps yet - we'll use them later to test our CDC pipeline.
+====
 
-=== Key-pair authentication
+=== 🔐 Key-pair Authentication Setup
 
-Follow the steps in the Snowflake documentation for https://docs.snowflake.com/en/user-guide/key-pair-auth[key-pair authentication].
-The private key will be referenced in the next step.
+Snowflake key-pair authentication provides secure, passwordless access for RIOT-X.
 
-== RIOT-X
+📚 Follow the detailed steps in the https://docs.snowflake.com/en/user-guide/key-pair-auth[Snowflake key-pair authentication documentation].
 
-Now let's set up our external collector which is a RIOT-X `snowflake-import` command.
+[TIP]
+====
+💾 **Save your private key** in a secure location (e.g., `~/.ssh/snowflake_key.p8`) - you'll need it in the next section.
+====
 
-1. Install `k8r` from https://github.com/jeremyplichta/k8s-run[k8s-run].
+== 🚀 RIOT-X External Collector
 
-2. Set secrets
+RIOT-X will act as our external collector, monitoring Snowflake for changes and feeding them into the RDI pipeline.
+
+[INFO]
+====
+🎯 **What's happening here:** RIOT-X connects to Snowflake using CDC capabilities and streams changes to RDI, which then processes and forwards them to our target Redis database.
+====
+
+1. 🛠️ **Install k8s-run tool:**
 +
-[source,console]
+Install `k8r` from https://github.com/jeremyplichta/k8s-run[k8s-run] to easily run containers in Kubernetes.
+
+2. 🔒 **Configure secrets for secure access:**
++
+[source,console,subs="verbatim,attributes"]
 ----
 k8r secret --job-name riotx snowflake_key.p8 ~/.ssh/snowflake_key.p8
-k8r secret --job-name riotx redis_pass admin123
+k8r secret --job-name riotx redis_pass {rdi-pass}
 ----
 
-3. Deploy RIOT-X
+3. 🚀 **Launch the RIOT-X collector:**
++
+[IMPORTANT]
+====
+📝 **Before running:** Replace `<account>` with your Snowflake account identifier and `<user>` with your Snowflake username.
+====
 +
 [source,console]
 ----
-k8r run --rm --job-name riotx -d riotx/riotx:latest -- riotx snowflake-import --progress log --host redis-rdi-load-balancer.redis-enterprise.svc.cluster.local --port 12001 --pass '$REDIS_PASS' --role riotx_cdc --warehouse compute_wh --cdc-schema raw_pos_cdc --jdbc-url "jdbc:snowflake://poeokma-ha50795.snowflakecomputing.com?private_key_file=/k8r/secrets/snowflake_key.p8" --jdbc-user <snowflake_user> --offset-clear tb_101.raw_pos.incremental_order_header
+k8r run --rm --job-name riotx -d riotx/riotx:latest -- riotx snowflake-import --progress log --host redis-rdi-load-balancer.redis-enterprise.svc.cluster.local --port 12001 --pass '$REDIS_PASS' --role riotx_cdc --warehouse compute_wh --cdc-schema raw_pos_cdc --jdbc-url "jdbc:snowflake://<account>.snowflakecomputing.com?private_key_file=/k8r/secrets/snowflake_key.p8" --jdbc-user <user> --offset-clear tb_101.raw_pos.incremental_order_header
 ----
 
-== CDC Operations
+== 🧪 Testing CDC Operations
 
-Now that the RDI pipeline is running with RIOT-X as the collector, let's test the different CDC operations.
+Time to test our complete CDC pipeline! We'll verify that changes in Snowflake are automatically captured and replicated to Redis.
 
-1. In Redis Insight add a connection to the <<_target_db, target Redis database>>.
+[INFO]
+====
+✨ **What to expect:** As you make changes in Snowflake, you should see corresponding updates in Redis within seconds, demonstrating continuous data synchronization.
+====
 
-2. Snapshot
+1. 🔗 **Connect to your target Redis database:**
 +
-Verify that the target Redis database has `100` keys (same count as the Snowflake table).
+In Redis Insight, add a connection to the <<_target_db, target Redis database>> you created earlier.
 
-3. Insert
+2. 📸 **Initial Snapshot Test:**
 +
-Run the next step (`additional_data`) in the Snowflake notebook. Verify that the target Redis database contains an additional `100` keys (`200` total).
+✅ Verify that your target Redis database contains exactly `100` keys (matching the initial Snowflake table row count).
++
+[TIP]
+====
+🔍 In Redis Insight, use the "Keys" view to see all `order:*` keys that were created from the initial data snapshot.
+====
 
-4. Update
+3. ➕ **Insert Operation Test:**
 +
-Run the next step (`update`) and verify the corresponding key is updated in the target Redis database.
+▶️ Return to your Snowflake notebook and run the `additional_data` step
++
+✅ Verify the target Redis database now contains `200` total keys (original 100 + new 100)
 
-5. Delete
+4. ✏️ **Update Operation Test:**
 +
-Run the next step (`delete`) and verify the corresponding key is deleted from the target Redis database.
+▶️ Run the `update` step in the Snowflake notebook
++
+✅ Check that the corresponding Redis hash key is updated with the new values
+
+5. 🗑️ **Delete Operation Test:**
++
+▶️ Run the `delete` step in the Snowflake notebook
++
+✅ Confirm the corresponding key is removed from the Redis database
+
+[NOTE]
+====
+🎉 **Congratulations!** If all tests pass, you've successfully set up a complete real-time CDC pipeline from Snowflake to Redis using RDI and RIOT-X.
+
+📈 **Next steps:** Consider exploring RDI's advanced features like data transformations, filtering, and monitoring capabilities.
+====
 
 
 
