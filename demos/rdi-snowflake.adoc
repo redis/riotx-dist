@@ -1,0 +1,428 @@
+= Snowflake CDC with RDI and RIOT-X
+:rdi-version: 1.12.3
+:rdi-pass: admin123
+:rdi-jwt: CwxMR2btWRxlIWaF89f4NuCfPXFtDb3pTUqI3YnZUB0=
+
+This guide contains step-by-step instructions for Snowflake CDC with Redis Data Integration (RDI) and RIOT-X.
+
+== Prerequisites
+
+1. Google Cloud account.
+2. Snowflake account. Register for a https://signup.snowflake.com[free trial].
+3. https://redis.io/insight/[Redis Insight]
+
+== GKE and Redis Enterprise
+
+Follow the steps at https://github.com/redis-field-engineering/re-k8s-on-gke-quickstart[re-k8s-on-gke-quickstart] to:
+
+1. Create a GKE cluster.
+
+2. Deploy Redis Enterprise.
+
+3. Create the target Redis database.
+
+[[_target_db]]
+=== Target Redis Database
+
+[NOTE]
+====
+Modify `redis-database.yaml` to lower memory size and shard count, and disable TLS:
+
+[source,yaml]
+----
+  memorySize: 1GB
+  shardCount: 1
+  # ...
+  tlsMode: "disabled"
+----
+====
+
+Verify the Redis database has been created and keep the connection information for later:
+
+[source,console]
+----
+./scripts/get-redis-ui-credentials.sh
+🔑 Redis Enterprise Web UI Credentials
+=====================================
+...
+----
+
+=== RDI Redis Database
+
+1. Create another Redis Enterprise database that RDI will use to store its state:
++
+.`redis-rdi.yaml`
+[source,yaml]
+----
+apiVersion: app.redislabs.com/v1alpha1
+kind: RedisEnterpriseDatabase
+metadata:
+  name: redis-rdi
+  namespace: redis-enterprise
+spec:
+  # Redis Enterprise Cluster reference
+  redisEnterpriseCluster:
+    name: redis-enterprise-cluster
+  memorySize: 1GB
+  shardCount: 1
+  replication: true
+  evictionPolicy: noeviction
+  persistence: aofEverySecond
+  shardsPlacement: sparse
+  proxyPolicy: all-nodes
+
+  # Database configuration
+  databasePort: 12001
+  databaseSecretName: redis-db-sample-secret
+
+  # TLS configuration
+  tlsMode: "disabled"
+----
+
+2. Create the RDI database
++
+[source,console]
+----
+kubectl apply -f redis-rdi.yaml
+----
+
+3. Verify the database has been created and keep the connection information for later:
++
+[source,console]
+----
+./scripts/get-redis-ui-credentials.sh
+🔑 Redis Enterprise Web UI Credentials
+=====================================
+...
+----
+
+
+== RDI
+
+To deploy RDI on our GKE cluster we will follow *some* of the steps from the RDI documentation https://redis.io/docs/latest/integrate/redis-data-integration/installation/install-k8s/[Install on Kubernetes].
+
+1. Download the RDI Helm chart tar file
++
+[source,console,subs="verbatim,attributes"]
+----
+wget https://redis-enterprise-software-downloads.s3.amazonaws.com/redis-di/rdi-{rdi-version}.tgz
+----
+
+2. Create a values file:
++
+.`rdi-values.yaml`
+[source,yaml,subs="verbatim,attributes"]
+----
+global:
+  vmMode: false
+  openShift: false
+  logLevel: INFO
+  image:
+    registry: docker.io
+    repository: redis
+    tag: {rdi-version}
+  securityContext:
+    runAsNonRoot: true
+    runAsUser: 1000
+    runAsGroup: 1000
+    allowPrivilegeEscalation: false
+  createSecrets: true
+  externalSecrets:
+    enabled: false
+connection:
+  host: "redis-rdi-load-balancer.redis-enterprise.svc.cluster.local"
+  port: "12001"
+  username: ""
+  password: "{rdi-pass}"
+  ssl:
+    enabled: false
+reloader:
+  reloader:
+    watchGlobally: false
+    isOpenshift: false
+    deployment:
+      containerSecurityContext:
+        allowPrivilegeEscalation: false
+        capabilities:
+          drop:
+            - ALL
+      securityContext:
+        runAsUser: null
+  fullnameOverride: rdi-reloader
+operator:
+  image:
+    name: rdi-operator
+    pullPolicy: IfNotPresent
+  liveness:
+    failureThreshold: 3
+    periodSeconds: 20
+  readiness:
+    failureThreshold: 3
+    periodSeconds: 10
+  startup:
+    failureThreshold: 24
+    periodSeconds: 5
+
+  dataPlane:
+    collector:
+      image:
+        registry: docker.io
+        repository: redislabs/debezium-server
+        tag: 3.0.8.Final-rdi.1
+      initializer:
+        image:
+          name: rdi-collector-initializer
+      service:
+        type: ClusterIP
+        port: 9092
+      serviceMonitor:
+        enabled: false
+      serviceAccount:
+        enabled: true
+      ingress:
+        enabled: false
+        pathPrefix: "/metrics"
+    collectorApi:
+      enabled: true
+fluentd:
+  image:
+    name: rdi-fluentd
+    pullPolicy: IfNotPresent
+  rdiLogsHostPath: "/opt/rdi/logs"
+  podLogsHostPath: "/var/log/pods"
+  logrotateMinutes: "5"
+rdiMetricsExporter:
+  image:
+    name: rdi-monitor
+    pullPolicy: IfNotPresent
+  service:
+    type: ClusterIP
+    port: 9121
+  liveness:
+    failureThreshold: 6
+    periodSeconds: 10
+  readiness:
+    failureThreshold: 6
+    periodSeconds: 30
+  startup:
+    failureThreshold: 60
+    periodSeconds: 5
+  serviceMonitor:
+    enabled: false
+  ingress:
+    enabled: false
+    pathPrefix: "/metrics"
+api:
+  image:
+    name: rdi-api
+    pullPolicy: IfNotPresent
+  jwtKey: "{rdi-jwt}"
+  service:
+    type: ClusterIP
+    port: 8080
+    targetPort: 8081
+  liveness:
+    failureThreshold: 6
+    periodSeconds: 10
+  readiness:
+    failureThreshold: 6
+    periodSeconds: 30
+  startup:
+    failureThreshold: 60
+    periodSeconds: 5
+ingress:
+  enabled: true
+  className: "nginx"
+  tls:
+    enabled: false
+route:
+  enabled: false
+  tls:
+    enabled: false
+----
+
+3. Install the Helm chart:
++
+[source,console,subs="verbatim,attributes"]
+----
+helm upgrade --install rdi rdi-{rdi-version}.tgz -f rdi-values.yaml -n rdi --create-namespace
+----
+
+4. Verify the installation:
++
+[source,console]
+----
+helm list -n rdi
+----
++
+The output looks like the following:
++
+[source,console,subs="verbatim,attributes"]
+----
+NAME    NAMESPACE       REVISION        UPDATED         STATUS          CHART           APP VERSION
+default rdi             5               2025-08-14 ...  deployed        pipeline-0.1.0  0.0.0
+rdi     rdi             9               2025-08-13 ...  deployed        rdi-{rdi-version}
+----
++
+Also check that all pods have Running status:
++
+[source,console,subs="verbatim,attributes"]
+----
+kubectl get pod -n rdi
+
+NAME                                    READY   STATUS      RESTARTS      AGE
+processor-8b64ccb69-nwmgb               1/1     Running     0             18h
+rdi-api-f59db875f-bcvcv                 1/1     Running     0             21h
+rdi-metrics-exporter-6b55698c9f-bfpxf   1/1     Running     0             21h
+rdi-operator-745854864f-shn7r           1/1     Running     1 (12h ago)   21h
+rdi-reloader-546c9cd849-2zq98           1/1     Running     0             41h
+----
+
+5. Get the RDI API ingress information and note the IP address for later:
++
+[source,console]
+----
+kubectl describe ingress rdi-api -n rdi
+
+Name:             rdi-api
+Labels:           app=rdi-api
+                  app.kubernetes.io/managed-by=Helm
+                  product=rdi
+Namespace:        rdi
+Address:          35.233.236.75   # <1>
+Ingress Class:    nginx
+Default backend:  <default>
+Rules:
+  Host        Path  Backends
+  ----        ----  --------
+  *
+              /   rdi-api:8080 (10.1.2.29:8081)
+Annotations:  meta.helm.sh/release-name: rdi
+              meta.helm.sh/release-namespace: rdi
+Events:       <none>
+----
+<1> RDI API external IP address
+
+== Redis Insight
+
+=== RDI Job
+
+Let's configure a RDI pipeline job using Redis Insight.
+
+1. Add endpoint
++
+Click on `Redis Data Integration` and create an endpoint with:
++
+[horizontal,subs="verbatim,attributes"]
+----
+RDI Alias:: `gke`
+URL:: `https://<external_ip>/`
+Username:: `default`
+Password:: `admin123`
+----
++
+Click on `Configuration file` and paste this:
++
+[source,yaml]
+----
+sources:
+  riotx:
+    type: external
+    connection: {}
+
+targets:
+  target:
+  connection:
+    type: redis
+    host: redis-db-sample-load-balancer.redis-enterprise.svc.cluster.local
+    port: 12000
+    password: admin123
+----
+
+2. Add job
++
+Now click the `+` sign next to *Jobs*. Give it the name `orders` and paste the following:
++
+[source,yaml]
+----
+name: orders
+source:
+  table: incremental_order_header
+
+output:
+  - uses: redis.write
+    with:
+      connection: target
+      data_type: hash
+      key:
+        expression: concat(['order:', ORDER_ID])
+        language: jmespath
+----
+
+3. Deploy pipeline
++
+Click on **Deploy Pipeline**, check the **Reset** box, and then **Deploy**.
+
+== Snowflake
+
+=== Database Setup
+In your https://quickstarts.snowflake.com/guide/getting_started_with_snowflake_notebooks/index.html?index=..%2F..index#1[Snowflake UI] (Snowsight) import this notebook: link:https://redis.github.io/riotx/snowflake-cdc.ipynb[snowflake-cdc.ipynb].
+Run the first 2 steps in the notebook:
+
+[horizontal]
+`init`:: Set up roles, permissions and schema
+`populate`:: Create and populate table
+
+IMPORTANT: Do not run the other steps yet. These are for later.
+
+=== Key-pair authentication
+
+Follow the steps in the Snowflake documentation for https://docs.snowflake.com/en/user-guide/key-pair-auth[key-pair authentication].
+The private key will be referenced in the next step.
+
+== RIOT-X
+
+Now let's set up our external collector which is a RIOT-X `snowflake-import` command.
+
+1. Install `k8r` from https://github.com/jeremyplichta/k8s-run[k8s-run].
+
+2. Set secrets
++
+[source,console]
+----
+k8r secret --job-name riotx snowflake_key.p8 ~/.ssh/snowflake_key.p8
+k8r secret --job-name riotx redis_pass admin123
+----
+
+3. Deploy RIOT-X
++
+[source,console]
+----
+k8r run --rm --job-name riotx -d riotx/riotx:latest -- riotx snowflake-import --progress log --host redis-rdi-load-balancer.redis-enterprise.svc.cluster.local --port 12001 --pass '$REDIS_PASS' --role riotx_cdc --warehouse compute_wh --cdc-schema raw_pos_cdc --jdbc-url "jdbc:snowflake://poeokma-ha50795.snowflakecomputing.com?private_key_file=/k8r/secrets/snowflake_key.p8" --jdbc-user <snowflake_user> --offset-clear tb_101.raw_pos.incremental_order_header
+----
+
+== CDC Operations
+
+Now that the RDI pipeline is running with RIOT-X as the collector, let's test the different CDC operations.
+
+1. In Redis Insight add a connection to the <<_target_db, target Redis database>>.
+
+2. Snapshot
++
+Verify that the target Redis database has `100` keys (same count as the Snowflake table).
+
+3. Insert
++
+Run the next step (`additional_data`) in the Snowflake notebook. Verify that the target Redis database contains an additional `100` keys (`200` total).
+
+4. Update
++
+Run the next step (`update`) and verify the corresponding key is updated in the target Redis database.
+
+5. Delete
++
+Run the next step (`delete`) and verify the corresponding key is deleted from the target Redis database.
+
+
+
+
