@@ -5,8 +5,9 @@
 :dist-repo:       riotx-dist
 :project-url:     https://github.com/{project-owner}/{dist-repo}
 :doc-url:         https://{project-owner}.github.io/riotx
+:img-url:         {doc-url}/_images
 
-image::{doc-url}/images/riotx.svg[RIOT-X]
+image::{img-url}/riotx.svg[RIOT-X]
 
 ---
 
@@ -16,9 +17,9 @@ image::{doc-url}/images/riotx.svg[RIOT-X]
 * Memcached Replication
 * Redis Stream Import/Export
 
-image::{doc-url}/images/riotx-dashboard-replication.png[]
+image::{img-url}/dashboard-replication.png[]
 
-image::{doc-url}/images/riotx-dashboard-jvm.png[]
+image::{img-url}/dashboard-jvm.png[]
 
 == Documentation
 
