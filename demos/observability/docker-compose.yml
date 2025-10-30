@@ -1,0 +1,45 @@
+# RIOT-X Observability Demo
+#
+# Full demo with Redis replication and observability stack
+#
+# Usage:
+#   cd demos/observability
+#   docker compose up
+#
+# This includes the base observability stack and adds demo-specific services
+include:
+  - path: ../../observability/docker-compose.yml
+    project_directory: ../../observability
+
+services:
+  source:
+    image: redis
+    hostname: source
+    ports:
+      - "6379:6379"
+    volumes:
+      - ./redis.conf:/usr/local/etc/redis/redis.conf
+    command: redis-server /usr/local/etc/redis/redis.conf
+
+  target:
+    image: redis
+    hostname: target
+    ports:
+      - "6380:6379"
+
+  riot-gen:
+    image: riotx/riotx
+    depends_on:
+      - source
+    command: gen --rate 10 --count 1000000 -h source --progress log
+
+  riot-sync:
+    image: riotx/riotx
+    depends_on:
+      - source
+      - target
+    command: sync redis://source:6379 redis://target:6379 --mode live --metrics --progress log
+    ports:
+      - "8080:8080"
+
+
