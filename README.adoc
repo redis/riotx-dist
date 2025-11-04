@@ -11,7 +11,7 @@ image::{img-url}/riotx.svg[RIOT-X]
 
 ---
 
-{project-title} is an extension to https://github.com/redis/riot[RIOT] which provides the following additional features for https://redis.io/cloud/[Redis Cloud] and https://redis.io/enterprise/[Redis Software]:
+{project-title} is an enterprise data integration tool for https://redis.io/cloud/[Redis Cloud] and https://redis.io/enterprise/[Redis Software] which provides the following features:
 
 * Observability
 * Memcached Replication
@@ -37,4 +37,3 @@ docker compose -f docker-compose-replicate.yml up
 == Support
 
 {project-title} is supported by Redis, Inc.
-
