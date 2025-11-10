@@ -1,0 +1,89 @@
+= 📊 RIOT-X Observability Stack
+
+Standalone Prometheus and Grafana stack for monitoring RIOT-X metrics.
+
+== 🚀 Quick Start
+
+To start the observability stack:
+
+[source,console]
+----
+cd observability
+docker compose up -d
+----
+
+This will start:
+
+* **Prometheus** on http://localhost:9090
+* **Grafana** on http://localhost:3000
+
+== 📋 Prerequisites
+
+* Docker and Docker Compose installed
+* RIOT-X instance running with `--metrics` flag
+* RIOT-X metrics exposed on port 8080
+
+== 🔧 Configuration
+
+=== Prometheus
+
+The Prometheus configuration is located at `prometheus/prometheus.yml`. By default, it scrapes metrics from `host.docker.internal:8080`.
+
+To monitor a different RIOT-X instance, edit `prometheus/prometheus.yml`:
+
+[source,yaml]
+----
+scrape_configs:
+  - job_name: 'riotx'
+    metrics_path: '/metrics'
+    scrape_interval: 1s
+    static_configs:
+      - targets: [ 'your-host:your-port' ]
+        labels:
+          application: 'RIOT-X'
+----
+
+=== Grafana
+
+Grafana is pre-configured with:
+
+* **Data Source**: Prometheus (automatically configured)
+* **Dashboard**: RIOT-X metrics dashboard (automatically loaded)
+
+Default credentials:
+
+* Username: `admin`
+* Password: `admin` (you'll be prompted to change it on first login)
+
+== 🎯 Accessing the Dashboard
+
+1. Open Grafana at http://localhost:3000
+2. Log in with default credentials
+3. Navigate to *Dashboards* → *RIOT-X*
+
+== 🛑 Stopping the Stack
+
+[source,console]
+----
+cd observability
+docker compose down
+----
+
+== 🔄 Reusing in Other Projects
+
+This observability stack can be reused in other projects or demos:
+
+1. Copy the entire `observability/` directory to your project
+2. Run: `cd observability && docker compose up -d`
+
+== 📚 Full Demo
+
+For a complete demo including Redis instances and RIOT-X replication, see link:demos/observability/README.adoc[demos/observability].
+
+== 📖 Additional Resources
+
+* link:demos/observability/README.adoc[Full Observability Demo]
+* https://github.com/redis/riot[RIOT-X Documentation]
+* https://prometheus.io/docs/[Prometheus Documentation]
+* https://grafana.com/docs/[Grafana Documentation]
+

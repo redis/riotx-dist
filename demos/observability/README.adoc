@@ -1,0 +1,263 @@
+= 📊 RIOT-X Grafana Observability Demo
+
+This demo showcases RIOT-X metrics monitoring using Prometheus and Grafana.
+
+[TIP]
+====
+⏱️ **Estimated completion time:** 5-10 minutes
+
+📋 **What you'll build:** A complete observability stack for monitoring RIOT-X replication metrics in real-time
+====
+
+== 📋 Overview
+
+This demo provides a complete observability stack for RIOT-X, including:
+
+* **Prometheus**: Metrics collection and storage
+* **Grafana**: Metrics visualization with pre-configured dashboards
+* **RIOT-X**: Redis replication with metrics enabled
+
+== 🔧 Prerequisites
+
+Before starting, ensure you have:
+
+* 🐳 Docker and Docker Compose installed
+* 📦 RIOT-X image available (`riotx/riotx:latest`)
+
+== 🚀 Quick Start
+
+=== Option 1: Full Demo with Redis Replication
+
+Use this option for a complete demo including Redis instances, RIOT-X replication, Prometheus, and Grafana.
+
+[source,console]
+----
+cd demos/observability
+docker compose up -d
+----
+
+This will start:
+
+* Prometheus on http://localhost:9090
+* Grafana on http://localhost:3000
+* Redis source instance on port 6379
+* Redis target instance on port 6380
+* RIOT-X data generator
+* RIOT-X replication with metrics enabled
+
+=== Option 2: Standalone Monitoring (Prometheus + Grafana only)
+
+Use this option if you want to monitor an existing RIOT-X instance running with `--metrics` flag.
+
+[source,console]
+----
+cd observability
+docker compose up -d
+----
+
+This will start:
+
+* Prometheus on http://localhost:9090
+* Grafana on http://localhost:3000
+
+[IMPORTANT]
+====
+Make sure your RIOT-X instance is running with the `--metrics` flag and exposing metrics on port 8080.
+====
+
+[TIP]
+====
+The standalone observability stack is located in the `observability/` directory and can be reused in other projects. See link:../../observability/README.adoc[observability/README.adoc] for details.
+====
+
+== 🎯 Accessing the Dashboard
+
+1. Open Grafana at http://localhost:3000
+2. Default credentials:
+   * Username: `admin`
+   * Password: `admin` (you'll be prompted to change it)
+3. Navigate to *Dashboards* → *RIOT-X*
+4. The dashboard is pre-configured with Prometheus as the data source
+
+== 📈 Dashboard Metrics
+
+The RIOT-X dashboard includes the following metrics:
+
+=== Replication Metrics
+
+* **Replication Lag**: Time delay between source and target
+* **Key Notification Drop**: Percentage of dropped key notifications
+* **Replication Rate**: Keys replicated per second
+* **Replication Byte Rate**: Bytes replicated per second
+
+=== System Metrics
+
+* **CPU Usage**: System and process CPU utilization
+* **Memory Usage**: JVM heap and non-heap memory
+* **Load Average**: System load metrics
+* **Start Time**: Process start timestamp
+* **Uptime**: Process uptime duration
+
+== ⚙️ Configuration
+
+=== Prometheus Configuration
+
+The Prometheus configuration is located at `prometheus/prometheus.yml`:
+
+[source,yaml]
+----
+scrape_configs:
+  - job_name: 'riotx'
+    metrics_path: '/metrics'
+    scrape_interval: 1s
+    static_configs:
+      - targets: [ 'host.docker.internal:8080' ]
+        labels:
+          application: 'RIOT-X'
+----
+
+[TIP]
+====
+To monitor a different RIOT-X instance, update the `targets` field with the appropriate host and port.
+====
+
+=== Grafana Provisioning
+
+Grafana is pre-configured with:
+
+* **Data Source**: Prometheus (automatically configured)
+* **Dashboard**: RIOT-X metrics dashboard (automatically loaded)
+
+Configuration files are located in:
+
+* `grafana/provisioning/datasources/datasources.yml`
+* `grafana/provisioning/dashboards/dashboards.yml`
+* `grafana/provisioning/dashboards/riotx-dashboard.json`
+
+== 🔍 Running RIOT-X with Metrics
+
+To enable metrics in your RIOT-X instance, use the `--metrics` flag:
+
+[source,console]
+----
+riotx replicate <source> <target> --mode live --metrics
+----
+
+By default, metrics are exposed on port 8080 at the `/metrics` endpoint.
+
+To use a different port:
+
+[source,console]
+----
+riotx replicate <source> <target> --mode live --metrics --metrics-port 9090
+----
+
+== 🛑 Stopping the Demo
+
+To stop all services:
+
+[source,console]
+----
+# For full demo
+cd demos/observability
+docker compose down
+
+# For standalone monitoring
+cd observability
+docker compose down
+----
+
+To stop and remove volumes:
+
+[source,console]
+----
+# For full demo
+cd demos/observability
+docker compose down -v
+
+# For standalone monitoring
+cd observability
+docker compose down -v
+----
+
+== 🔧 Troubleshooting
+
+=== Grafana shows "No Data"
+
+1. Verify Prometheus is running: http://localhost:9090
+2. Check if RIOT-X metrics are available: http://localhost:8080/metrics
+3. Verify Prometheus is scraping RIOT-X:
+   * Go to http://localhost:9090/targets
+   * Check if the `riotx` target is UP
+
+=== RIOT-X metrics not available
+
+1. Ensure RIOT-X is running with the `--metrics` flag
+2. Verify the metrics port (default: 8080) is accessible
+3. Check RIOT-X logs for any errors
+
+=== Connection refused errors
+
+[NOTE]
+====
+If running RIOT-X outside Docker:
+
+* On macOS/Windows: Use `host.docker.internal` in prometheus.yml (already configured)
+* On Linux: Use `172.17.0.1` or the host's IP address
+====
+
+== 🎨 Customization
+
+=== Adding Custom Panels
+
+1. Open Grafana at http://localhost:3000
+2. Navigate to the RIOT-X dashboard
+3. Click *Add* → *Visualization*
+4. Select Prometheus as the data source
+5. Use PromQL to query RIOT-X metrics
+6. Save the dashboard
+
+=== Exporting Dashboard Changes
+
+To persist dashboard changes:
+
+1. In Grafana, go to *Dashboard Settings* → *JSON Model*
+2. Copy the JSON
+3. Save it to `grafana/provisioning/dashboards/riotx-dashboard.json`
+4. Restart Grafana to apply changes
+
+== 📊 Available Metrics
+
+RIOT-X exposes the following Prometheus metrics:
+
+* `riotx_replication_lag_seconds`: Replication lag in seconds
+* `riotx_replication_rate`: Keys replicated per second
+* `riotx_replication_byte_rate`: Bytes replicated per second
+* `riotx_key_notification_drop_percent`: Percentage of dropped notifications
+* `process_cpu_usage`: Process CPU usage
+* `system_cpu_usage`: System CPU usage
+* `jvm_memory_used_bytes`: JVM memory usage
+* `system_load_average_1m`: System load average (1 minute)
+
+[TIP]
+====
+For a complete list of metrics, visit http://localhost:8080/metrics when RIOT-X is running.
+====
+
+== 🏗️ Architecture
+
+[source]
+----
+┌─────────────┐     ┌─────────────┐     ┌─────────────┐
+│   RIOT-X    │────▶│ Prometheus  │────▶│   Grafana   │
+│  (metrics)  │     │  (storage)  │     │ (dashboard) │
+└─────────────┘     └─────────────┘     └─────────────┘
+     :8080               :9090               :3000
+----
+
+== 📚 Additional Resources
+
+* https://github.com/redis/riot[RIOT-X Documentation]
+* https://prometheus.io/docs/[Prometheus Documentation]
+* https://grafana.com/docs/[Grafana Documentation]
+
